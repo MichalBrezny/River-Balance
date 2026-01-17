@@ -134,12 +134,13 @@ const Balance = {
         const streamPower = discharge * slope;
 
         // Braiding index: combines factors that promote braiding
-        // - High sediment load (bedload-dominated)
+        // - High sediment load (bedload-dominated) - primary factor
         // - Coarse sediment (non-cohesive, forms bars easily)
-        // - Steep slope (high energy, unstable banks)
-        // - Strong aggradation (excess sediment)
-        const braidingIndex = (sedimentLoad * 0.4) + (grainSize * 0.3) + (slope * 0.2) +
-                             (ratio > 1 ? Math.min((ratio - 1) * 0.1, 0.1) : 0);
+        // - Aggradation (excess sediment relative to transport capacity) - critical factor
+        // Note: High stream power (Qw*S) does NOT promote braiding directly
+        // It increases transport capacity, so you need MORE sediment to braid
+        const aggradationFactor = ratio > 1 ? Math.min((ratio - 1) * 0.3, 0.3) : 0;
+        const braidingIndex = (sedimentLoad * 0.35) + (grainSize * 0.25) + aggradationFactor;
 
         // Braided rivers: high braiding index
         // Threshold set so default values (50/50/50/50) show meandering
