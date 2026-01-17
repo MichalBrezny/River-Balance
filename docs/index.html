@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lane's Balance - Interactive Fluvial Geomorphology</title>
+    <meta name="description" content="Interactive visualization of Lane's Balance equation (Qs·D50 ∝ Qw·S) for understanding river channel dynamics, aggradation, and degradation in fluvial geomorphology.">
+    <meta name="keywords" content="Lane's Balance, fluvial geomorphology, river dynamics, sediment transport, aggradation, degradation, channel patterns">
+    <meta name="author" content="River-Balance Project">
+
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Lane's Balance - Interactive Fluvial Geomorphology">
+    <meta property="og:description" content="Explore how sediment supply, grain size, water discharge, and slope affect river channel patterns through an interactive visualization.">
+    <meta property="og:image" content="fig/balance.jpg">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Lane's Balance - Interactive Fluvial Geomorphology">
+    <meta name="twitter:description" content="Explore how sediment supply, grain size, water discharge, and slope affect river channel patterns.">
+    <meta name="twitter:image" content="fig/balance.jpg">
+
+    <!-- Favicon (using emoji as simple favicon) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Lane's Balance</h1>
+        <p class="subtitle">Interactive Fluvial Geomorphology Visualization</p>
+    </header>
+
+    <main class="container">
+        <!-- Top Section: Scale (centered) with Controls on sides -->
+        <div class="top-section">
+            <!-- Left Controls: Sediment parameters -->
+            <aside class="controls-panel controls-left">
+                <div class="slider-group sediment-side">
+                    <label for="qs-slider" class="param-label">
+                        <span class="param-name">Q<sub>s</sub></span>
+                        <output id="qs-value" class="param-value" for="qs-slider">50</output>
+                    </label>
+                    <span class="param-desc">Sediment Discharge (rel. units)</span>
+                    <span class="tooltip-text">How much sediment enters the reach.</span>
+                    <input type="range" id="qs-slider" min="1" max="100" value="50">
+                    <div class="slider-labels">
+                        <span>Low</span>
+                        <span>High</span>
+                    </div>
+                </div>
+
+                <div class="slider-group sediment-side">
+                    <label for="d50-slider" class="param-label">
+                        <span class="param-name">D<sub>50</sub></span>
+                        <output id="d50-value" class="param-value" for="d50-slider">50</output>
+                    </label>
+                    <span class="param-desc">Sediment Size (0.1-100 mm, log)</span>
+                    <span class="tooltip-text">Grain size controls mobility; coarser material is harder to transport.</span>
+                    <input type="range" id="d50-slider" min="1" max="100" value="50">
+                    <div class="slider-labels">
+                        <span>Fine</span>
+                        <span>Coarse</span>
+                    </div>
+                </div>
+
+                <div class="controls-group">
+                    <button id="reset-btn" class="reset-button">Reset to Equilibrium</button>
+                </div>
+
+                <div class="controls-group">
+                    <h4>Display</h4>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-tooltips">
+                        <span>Show explanations</span>
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-numeric" checked>
+                        <span>Show numeric mode</span>
+                    </label>
+                    <button id="screenshot-btn" class="preset-button">Screenshot</button>
+                </div>
+            </aside>
+
+            <!-- Center: Balance Scale -->
+            <section class="scale-section">
+                <div id="scale-viz"></div>
+                <div class="tendency-panel">
+                    <div id="tendency-label">Tendency: Near equilibrium</div>
+                    <div id="tendency-why">Sediment supply and transport capacity are balanced.</div>
+                    <div id="imbalance-value">Imbalance index I = 0.00</div>
+                </div>
+            </section>
+
+            <!-- Right Controls: Water parameters -->
+            <aside class="controls-panel controls-right">
+                <div class="slider-group water-side">
+                    <label for="qw-slider" class="param-label">
+                        <span class="param-name">Q<sub>w</sub></span>
+                        <output id="qw-value" class="param-value" for="qw-slider">50</output>
+                    </label>
+                    <span class="param-desc">Water Discharge (rel. units)</span>
+                    <span class="tooltip-text">Flow strength and transport capacity.</span>
+                    <input type="range" id="qw-slider" min="1" max="100" value="50">
+                    <div class="slider-labels">
+                        <span>Low</span>
+                        <span>High</span>
+                    </div>
+                </div>
+
+                <div class="slider-group water-side">
+                    <label for="s-slider" class="param-label">
+                        <span class="param-name">S</span>
+                        <output id="s-value" class="param-value" for="s-slider">50</output>
+                    </label>
+                    <span class="param-desc">Channel Slope (rel. %)</span>
+                    <span class="tooltip-text">Slope contributes to stream power and transport capacity.</span>
+                    <input type="range" id="s-slider" min="1" max="100" value="50">
+                    <div class="slider-labels">
+                        <span>Flat</span>
+                        <span>Steep</span>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Reset Button and Processes Row -->
+        <div class="middle-section">
+            <section class="processes">
+                <h3>Active Processes:</h3>
+                <ul id="process-list">
+                    <!-- Populated by processView.js -->
+                </ul>
+            </section>
+        </div>
+
+        <!-- Bottom Section: Profile and Plan View side by side -->
+        <div class="bottom-section">
+            <section class="plan-section">
+                <h2>Plan View (Channel Pattern)</h2>
+                <div id="plan-viz"></div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <p>Lane's Balance: Q<sub>s</sub> &middot; D<sub>50</sub> &prop; Q<sub>w</sub> &middot; S</p>
+        <p class="equation-note">Sediment load &times; Grain size proportional to Water discharge &times; Slope</p>
+        <p class="equation-note">Lane's balance is conceptual, not a strict law, but it is useful for intuition and river management.</p>
+        <p class="equation-note">Conceptual demonstration for learning and discussion.</p>
+    </footer>
+
+    <!-- JavaScript modules -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="js/balance.js"></script>
+    <script src="js/scaleView.js"></script>
+    <script src="js/planView.js"></script>
+    <script src="js/processView.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+
+
