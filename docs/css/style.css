@@ -422,6 +422,17 @@ footer .equation-note {
     margin-top: 0.2rem;
 }
 
+footer a {
+    color: var(--color-water);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+footer a:hover {
+    color: var(--color-sediment);
+    text-decoration: underline;
+}
+
 /* SVG Styles */
 .scale-beam {
     fill: #555;

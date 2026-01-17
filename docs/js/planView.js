@@ -17,6 +17,7 @@ const PlanView = {
     lastQs: 50,
     lastQw: 50,
     lastD50: 50,
+    lastS: 50,
     currentSeed: 0,
     flowAnimationInterval: null,
     flowElements: [],
@@ -63,8 +64,9 @@ const PlanView = {
         // Flow ->
         this.addFlowIndicator();
 
-        // Draw initial meandering pattern
-        this.drawMeandering(50, 1);
+        // Draw initial meandering pattern (sinuosity matches update() calculation at Qs=50)
+        const initialSinuosity = 1.1 + (50 / 100) * 0.6;
+        this.drawMeandering(50, initialSinuosity, 50, 50);
         this.startFlowAnimation();
     },
 
@@ -617,12 +619,13 @@ const PlanView = {
         if (!this.channelGroup) return;
 
         const pattern = Balance.getChannelPattern(Qs, D50, Qw, S, ratio);
-        this.currentSeed = this.computeSeed(Qs, Qw, S, ratio);
+        this.currentSeed = this.computeSeed(Qs, D50, Qw, S, ratio);
 
         // Check if parameters changed significantly (> 5 units)
         const paramChanged = Math.abs(Qs - this.lastQs) > 5 ||
                             Math.abs(Qw - this.lastQw) > 5 ||
-                            Math.abs(D50 - (this.lastD50 || 50)) > 5;
+                            Math.abs(D50 - (this.lastD50 || 50)) > 5 ||
+                            Math.abs(S - (this.lastS || 50)) > 5;
         const patternChanged = pattern !== this.currentPattern;
 
         // Redraw if pattern changed OR significant parameter change
@@ -631,6 +634,7 @@ const PlanView = {
             this.lastQs = Qs;
             this.lastQw = Qw;
             this.lastD50 = D50;
+            this.lastS = S;
 
             this.stopFlowAnimation(); // Stop animation before redrawing
 
@@ -702,13 +706,14 @@ const PlanView = {
     /**
      * Compute a stable seed from parameters
      * @param {number} Qs
+     * @param {number} D50
      * @param {number} Qw
      * @param {number} S
      * @param {number} ratio
      * @returns {number}
      */
-    computeSeed(Qs, Qw, S, ratio) {
+    computeSeed(Qs, D50, Qw, S, ratio) {
         const ratioKey = Math.round(ratio * 1000);
-        return Qs * 1000000 + Qw * 10000 + S * 100 + ratioKey;
+        return Qs * 100000000 + D50 * 1000000 + Qw * 10000 + S * 100 + ratioKey;
     }
 };
