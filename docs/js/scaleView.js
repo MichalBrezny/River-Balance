@@ -22,6 +22,12 @@ const ScaleView = {
     arrowPointer: null,  // Direct reference to arrow pointer
     beamLength: 0,
 
+    // Pan and label references for moment arm positioning
+    sedimentPanGroup: null,
+    waterPanGroup: null,
+    sedimentLabel: null,
+    waterLabel: null,
+
     // Current parameter values for dynamic updates
     currentParams: { Qs: 50, D50: 50, Qw: 50, S: 50 },
 
@@ -195,6 +201,21 @@ const ScaleView = {
     },
 
     /**
+     * Calculate pan X position based on slider value (1-100)
+     * Maps slider to position range: beamLength * 0.25 to beamLength * 0.50
+     * @param {number} sliderValue - Slider value (1-100)
+     * @param {boolean} isLeft - True for left pan (negative X), false for right
+     * @returns {number} X offset from beam center
+     */
+    getPanPosition(sliderValue, isLeft) {
+        const minOffset = this.beamLength * 0.25;
+        const maxOffset = this.beamLength * 0.50;
+        const t = (sliderValue - 1) / 99; // Normalize to 0-1
+        const offset = minOffset + t * (maxOffset - minOffset);
+        return isLeft ? -offset : offset;
+    },
+
+    /**
      * Draw the balance beam and pans
      */
     drawBeam() {
@@ -220,17 +241,25 @@ const ScaleView = {
             .attr('stroke', '#444')
             .attr('stroke-width', 2);
 
-        // Left pan (sediment) - positioned at left end of beam
-        const leftX = -this.beamLength / 2 + 25;
-        this.drawSedimentPan(leftX);
+        // Initial pan positions at slider=50 (midpoint of range)
+        const leftX = this.getPanPosition(50, true);
+        const rightX = this.getPanPosition(50, false);
 
-        // Right pan (water bucket) - positioned at right end of beam
-        const rightX = this.beamLength / 2 - 25;
-        this.drawWaterBucket(rightX);
+        // Left pan (sediment)
+        this.sedimentPanGroup = this.beamGroup.append('g')
+            .attr('class', 'sediment-pan-group')
+            .attr('transform', `translate(${leftX}, 0)`);
+        this.drawSedimentPan(this.sedimentPanGroup);
 
-        // Labels above pans
-        this.beamGroup.append('text')
-            .attr('class', 'pan-label')
+        // Right pan (water bucket)
+        this.waterPanGroup = this.beamGroup.append('g')
+            .attr('class', 'water-pan-group')
+            .attr('transform', `translate(${rightX}, 0)`);
+        this.drawWaterBucket(this.waterPanGroup);
+
+        // Labels above pans (stored for repositioning)
+        this.sedimentLabel = this.beamGroup.append('text')
+            .attr('class', 'pan-label sediment-label')
             .attr('x', leftX)
             .attr('y', -20)
             .attr('text-anchor', 'middle')
@@ -239,8 +268,8 @@ const ScaleView = {
             .attr('font-weight', 'bold')
             .text('Qs * D50');
 
-        this.beamGroup.append('text')
-            .attr('class', 'pan-label')
+        this.waterLabel = this.beamGroup.append('text')
+            .attr('class', 'pan-label water-label')
             .attr('x', rightX)
             .attr('y', -20)
             .attr('text-anchor', 'middle')
@@ -252,12 +281,10 @@ const ScaleView = {
 
     /**
      * Draw the sediment pan with rock pile
-     * @param {number} x - X position relative to beam center
+     * @param {d3.Selection} panGroup - The parent group to draw into
      */
-    drawSedimentPan(x) {
-        const panGroup = this.beamGroup.append('g')
-            .attr('class', 'pan-group pan-sediment')
-            .attr('transform', `translate(${x}, 0)`);
+    drawSedimentPan(panGroup) {
+        panGroup.attr('class', 'pan-group pan-sediment');
 
         const chainLength = 40;
         const panWidth = 70;
@@ -305,12 +332,10 @@ const ScaleView = {
 
     /**
      * Draw the water bucket
-     * @param {number} x - X position relative to beam center
+     * @param {d3.Selection} panGroup - The parent group to draw into
      */
-    drawWaterBucket(x) {
-        const panGroup = this.beamGroup.append('g')
-            .attr('class', 'pan-group pan-water')
-            .attr('transform', `translate(${x}, 0)`);
+    drawWaterBucket(panGroup) {
+        panGroup.attr('class', 'pan-group pan-water');
 
         const chainLength = 40;
         const bucketWidth = 55;
@@ -523,6 +548,50 @@ const ScaleView = {
     },
 
     /**
+     * Update pan positions based on D50 and S values (moment arm effect)
+     * @param {number} D50 - Sediment size (1-100), controls sediment pan position
+     * @param {number} S - Slope (1-100), controls water pan position
+     * @param {number} duration - Animation duration in ms
+     */
+    updatePanPositions(D50, S, duration = 500) {
+        if (!this.sedimentPanGroup || !this.waterPanGroup) return;
+
+        const leftX = this.getPanPosition(D50, true);
+        const rightX = this.getPanPosition(S, false);
+
+        // Animate sediment pan group
+        this.sedimentPanGroup
+            .transition()
+            .duration(duration)
+            .ease(d3.easeQuadOut)
+            .attr('transform', `translate(${leftX}, 0)`);
+
+        // Animate water pan group
+        this.waterPanGroup
+            .transition()
+            .duration(duration)
+            .ease(d3.easeQuadOut)
+            .attr('transform', `translate(${rightX}, 0)`);
+
+        // Animate labels to follow pans
+        if (this.sedimentLabel) {
+            this.sedimentLabel
+                .transition()
+                .duration(duration)
+                .ease(d3.easeQuadOut)
+                .attr('x', leftX);
+        }
+
+        if (this.waterLabel) {
+            this.waterLabel
+                .transition()
+                .duration(duration)
+                .ease(d3.easeQuadOut)
+                .attr('x', rightX);
+        }
+    },
+
+    /**
      * Update arrow indicator rotation based on ratio
      * @param {number} ratio - Balance ratio
      */
@@ -574,6 +643,10 @@ const ScaleView = {
             }
             if (params.Qw !== this.currentParams.Qw || params.S !== this.currentParams.S) {
                 this.updateWater(params.Qw, params.S);
+            }
+            // Update pan positions if D50 or S changed (moment arm effect)
+            if (params.D50 !== this.currentParams.D50 || params.S !== this.currentParams.S) {
+                this.updatePanPositions(params.D50, params.S, duration);
             }
             this.currentParams = { ...params };
         }

@@ -1,0 +1,33 @@
+
+  Concept
+
+  The scale is a lever. Lane's equation has two kinds of terms per side: a quantity (Qs, Qw) and a property (D50, S).     
+  Right now, all four parameters only affect the tilt via the ratio. The visual enhancement is to use a torque/moment arm 
+  metaphor:
+
+  - D50 controls how far the sediment pan sits from the pivot. Coarser sediment (high D50) = pan moves outward (more      
+  leverage). Finer sediment = pan moves inward.
+  - S controls how far the water bucket sits from the pivot. Steeper slope (high S) = bucket moves outward. Flatter =     
+  inward.
+
+  This separates the visual roles: Qs/Qw control what's in the pans (rock count, water level), while D50/S control where  
+  the pans sit on the beam (moment arm). Students can see that the same "mass" has more effect when the arm is longer —   
+  reinforcing how grain size and slope act as multipliers in the equation.
+
+  What needs to change in scaleView.js
+
+  1. Store pan group references — the sediment pan group and water pan group need to be saved as this.sedimentPanGroup and
+   this.waterPanGroup so they can be repositioned after initial draw.
+  2. Store label references — the "Qs * D50" and "Qw * S" text elements need stored references too, since they sit above  
+  the pans and must move with them.
+  3. Define a position range — map slider values (1–100) to an X offset range along the beam. E.g. the pan moves between  
+  beamLength * 0.25 (innermost) and beamLength * 0.50 (outermost, near beam end) from the pivot. Sign is negative for left
+   pan, positive for right.
+  4. Add a updatePanPositions(D50, S, duration) method — animates the pan groups and labels to their new X positions using
+   D3 transitions.
+  5. Call it from update() — alongside the existing rock/water updates, check if D50 or S changed and animate the pan     
+  positions.
+  6. Adjust initial draw — drawBeam() should place pans at the position corresponding to slider=50 (the midpoint of the   
+  range), not at the beam ends.
+
+  Want me to proceed?
