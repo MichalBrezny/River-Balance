@@ -7,6 +7,7 @@
 
 const ProcessView = {
     container: null,
+    pendingTimeouts: [],
 
     /**
      * Initialize the process view
@@ -33,6 +34,10 @@ const ProcessView = {
         // Get active processes from Balance module
         const processes = Balance.getActiveProcesses(ratio, Qw, S);
 
+        // Cancel pending animation timeouts from previous update
+        this.pendingTimeouts.forEach(id => clearTimeout(id));
+        this.pendingTimeouts = [];
+
         // Clear existing list
         this.container.innerHTML = '';
 
@@ -49,11 +54,12 @@ const ProcessView = {
             this.container.appendChild(li);
 
             // Animate in
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 li.style.transition = 'opacity 0.3s, transform 0.3s';
                 li.style.opacity = '1';
                 li.style.transform = 'translateX(0)';
             }, index * 50);
+            this.pendingTimeouts.push(timeoutId);
         });
 
         // Update section header color based on state

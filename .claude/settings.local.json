@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(git -C \"C:\\\\Repository\\\\LSPD-lectures-lab\\\\River-Balance\" log --oneline -10)"
+    ]
+  }
+}

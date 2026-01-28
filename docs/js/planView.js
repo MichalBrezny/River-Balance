@@ -19,7 +19,9 @@ const PlanView = {
     lastD50: 50,
     lastS: 50,
     currentSeed: 0,
-    flowAnimationInterval: null,
+    flowAnimationId: null,
+    flowAnimationRunning: false,
+    flowLastTimestamp: 0,
     flowElements: [],
 
     /**
@@ -64,8 +66,8 @@ const PlanView = {
         // Flow ->
         this.addFlowIndicator();
 
-        // Draw initial meandering pattern (sinuosity matches update() calculation at Qs=50)
-        const initialSinuosity = 1.1 + (50 / 100) * 0.6;
+        // Draw initial meandering pattern (sinuosity matches update() calculation at defaults)
+        const initialSinuosity = 1.1 + (50 / 100) * 0.5 - (50 / 100) * 0.2;
         this.drawMeandering(50, initialSinuosity, 50, 50);
         this.startFlowAnimation();
     },
@@ -556,24 +558,31 @@ const PlanView = {
     },
 
     /**
-     * Start the water flow animation
+     * Start the water flow animation using requestAnimationFrame
      */
     startFlowAnimation() {
-        if (this.flowAnimationInterval) {
-            clearInterval(this.flowAnimationInterval);
-        }
-        this.flowAnimationInterval = setInterval(() => {
-            this.updateFlowAnimation();
-        }, 50); // Update every 50ms
+        this.flowAnimationRunning = true;
+        this.flowLastTimestamp = 0;
+        const step = (timestamp) => {
+            if (!this.flowAnimationRunning) return;
+            // Throttle to ~20fps (50ms intervals) to match original behavior
+            if (timestamp - this.flowLastTimestamp >= 50) {
+                this.flowLastTimestamp = timestamp;
+                this.updateFlowAnimation();
+            }
+            this.flowAnimationId = requestAnimationFrame(step);
+        };
+        this.flowAnimationId = requestAnimationFrame(step);
     },
 
     /**
      * Stop the water flow animation
      */
     stopFlowAnimation() {
-        if (this.flowAnimationInterval) {
-            clearInterval(this.flowAnimationInterval);
-            this.flowAnimationInterval = null;
+        this.flowAnimationRunning = false;
+        if (this.flowAnimationId) {
+            cancelAnimationFrame(this.flowAnimationId);
+            this.flowAnimationId = null;
         }
     },
 
@@ -582,23 +591,11 @@ const PlanView = {
      */
     updateFlowAnimation() {
         this.flowElements.forEach(d => {
-            if (d.pathNode) {
-                // Path-based animation for meandering/straight channels
-                d.offset = (d.offset + d.speed) % d.pathLength;
-                const p = d.pathNode.getPointAtLength(d.offset);
-                d.x = p.x;
-                d.y = p.y;
-            } else {
-                // Linear animation for braided channels
-                d.x = d.x + d.speed;
-                // Add slight wobble
-                d.wobble += 0.1;
-                d.y = d.baseY + Math.sin(d.wobble) * 3;
-                // Loop when reaching edge
-                if (d.x > this.width + 5) {
-                    d.x = -5;
-                }
-            }
+            if (!d.pathNode) return;
+            d.offset = (d.offset + d.speed) % d.pathLength;
+            const p = d.pathNode.getPointAtLength(d.offset);
+            d.x = p.x;
+            d.y = p.y;
         });
 
         this.channelGroup.selectAll('.flow-element')
@@ -621,11 +618,11 @@ const PlanView = {
         const pattern = Balance.getChannelPattern(Qs, D50, Qw, S, ratio);
         this.currentSeed = this.computeSeed(Qs, D50, Qw, S, ratio);
 
-        // Check if parameters changed significantly (> 5 units)
-        const paramChanged = Math.abs(Qs - this.lastQs) > 5 ||
-                            Math.abs(Qw - this.lastQw) > 5 ||
-                            Math.abs(D50 - (this.lastD50 || 50)) > 5 ||
-                            Math.abs(S - (this.lastS || 50)) > 5;
+        // Check if any parameter changed (threshold of 1 unit)
+        const paramChanged = Math.abs(Qs - this.lastQs) > 1 ||
+                            Math.abs(Qw - this.lastQw) > 1 ||
+                            Math.abs(D50 - (this.lastD50 || 50)) > 1 ||
+                            Math.abs(S - (this.lastS || 50)) > 1;
         const patternChanged = pattern !== this.currentPattern;
 
         // Redraw if pattern changed OR significant parameter change
@@ -649,9 +646,12 @@ const PlanView = {
             } else if (pattern === 'braided') {
                 this.drawBraided(Qw, Qs, D50);
             } else {
-                // Sinuosity increases with sediment load (more point bars)
-                const sinuosity = 1.1 + (Qs / 100) * 0.6;
-                this.drawMeandering(Qw, sinuosity, Qs, D50);
+                // Sinuosity driven by discharge (energy to erode banks) and
+                // suppressed by high sediment load (pushes toward braiding).
+                const dischargeFactor = Qw / 100;
+                const sedimentSuppression = Qs / 100;
+                const sinuosity = 1.1 + dischargeFactor * 0.5 - sedimentSuppression * 0.2;
+                this.drawMeandering(Qw, Math.max(1.05, sinuosity), Qs, D50);
             }
 
             // Fade in after redraw
@@ -713,7 +713,9 @@ const PlanView = {
      * @returns {number}
      */
     computeSeed(Qs, D50, Qw, S, ratio) {
-        const ratioKey = Math.round(ratio * 1000);
-        return Qs * 100000000 + D50 * 1000000 + Qw * 10000 + S * 100 + ratioKey;
+        // Each slider is 1-100, so 3 digits suffice per param.
+        // ratio is clamped to avoid overflow; we only need coarse bucketing.
+        const ratioKey = Math.max(0, Math.min(999, Math.round(Math.log10(Math.max(0.01, ratio)) * 100 + 500)));
+        return ((Qs * 1000 + D50) * 1000 + Qw) * 1000 + S + ratioKey / 1000;
     }
 };

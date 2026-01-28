@@ -25,8 +25,8 @@ const Balance = {
      * @returns {number} Balance ratio
      */
     calculateRatio(Qs, D50, Qw, S) {
-        const sedimentTerm = Qs * this.mapD50(D50);
-        const waterTerm = Qw * this.mapSlope(S);
+        const sedimentTerm = this.mapDischarge(Qs) * this.mapD50(D50);
+        const waterTerm = this.mapDischarge(Qw) * this.mapSlope(S);
 
         // Prevent division by zero
         if (waterTerm === 0) return Infinity;
@@ -35,7 +35,22 @@ const Balance = {
     },
 
     /**
-     * Map D50 slider (1-100) to log-scaled value for calculation
+     * Map a discharge slider (1-100) to log-scaled value.
+     * Both Qs and Qw use the same mapping so they have symmetric influence.
+     * Slider 1 → 1, slider 50 → ~31.6 (10^1.5), slider 100 → 1000 (10^3).
+     * Three orders of magnitude, centered so that slider 50 maps to the
+     * geometric midpoint — this ensures ratio = 1 at default 50/50/50/50.
+     * @param {number} value - Slider value (1-100)
+     * @returns {number}
+     */
+    mapDischarge(value) {
+        const ratio = (value - 1) / 99;   // 0 to 1
+        const logValue = ratio * 3;        // 10^0 to 10^3
+        return Math.pow(10, logValue);
+    },
+
+    /**
+     * Map D50 slider (1-100) to log-scaled mm (0.1-100)
      * @param {number} value - D50 slider value
      * @returns {number}
      */
@@ -46,13 +61,16 @@ const Balance = {
     },
 
     /**
-     * Map slope slider (1-100) to a scaled value for calculation
+     * Map slope slider (1-100) to log-scaled value.
+     * Same 3-decade log range as D50 so both "property" terms are symmetric.
+     * Slider 1 → 0.1, slider 50 → ~3.16, slider 100 → 100.
      * @param {number} value - Slope slider value
      * @returns {number}
      */
     mapSlope(value) {
-        // Map 1-100 to a more reasonable range, e.g., 0.1 to 10
-        return 0.1 + (value / 100) * 5.906;
+        const ratio = (value - 1) / 99;
+        const logValue = -1 + 3 * ratio; // From 10^-1 to 10^2
+        return Math.pow(10, logValue);
     },
 
     /**
@@ -131,27 +149,35 @@ const Balance = {
         const grainSize = D50 / 100;  // 0-1, higher = coarser
         const slope = S / 100;
         const discharge = Qw / 100;
-        const streamPower = discharge * slope;
-
-        // Braiding index: combines factors that promote braiding
-        // - High sediment load (bedload-dominated) - primary factor
-        // - Coarse sediment (non-cohesive, forms bars easily)
-        // - Aggradation (excess sediment relative to transport capacity) - critical factor
-        // Note: High stream power (Qw*S) does NOT promote braiding directly
-        // It increases transport capacity, so you need MORE sediment to braid
-        const aggradationFactor = ratio > 1 ? Math.min((ratio - 1) * 0.3, 0.3) : 0;
-        const braidingIndex = (sedimentLoad * 0.35) + (grainSize * 0.25) + aggradationFactor;
-
-        // Braided rivers: high braiding index
-        // Threshold set so default values (50/50/50/50) show meandering
-        if (braidingIndex > 0.5) {
-            return 'braided';
-        }
 
         // Straight channels: only when discharge is very low (not enough energy to meander)
         // This is rare - most rivers with any flow will meander
         if (discharge < 0.15) {
             return 'straight';
+        }
+
+        // Braiding requires BOTH sufficient stream power to rework sediment across
+        // the full valley width AND excess sediment supply relative to capacity.
+        // Key factors promoting braiding:
+        // - High sediment load (bedload-dominated) — primary driver
+        // - Coarse, non-cohesive sediment (forms bars easily)
+        // - Aggradation (excess sediment relative to transport capacity)
+        // - Steep slope (increases stream power, promotes bar formation)
+        // Key constraint:
+        // - Discharge must be sufficient to mobilize sediment across the braidplain;
+        //   very low Qw cannot sustain braiding regardless of sediment supply.
+        const aggradationFactor = ratio > 1 ? Math.min((ratio - 1) * 0.3, 0.3) : 0;
+        const slopeFactor = slope * 0.15;
+        const braidingPotential = (sedimentLoad * 0.30) + (grainSize * 0.20) + aggradationFactor + slopeFactor;
+
+        // Discharge acts as an enabler: scale braiding potential by how much
+        // flow energy is available. Below ~30% discharge, braiding is suppressed.
+        const dischargeScaling = Math.min(discharge / 0.3, 1.0);
+        const braidingIndex = braidingPotential * dischargeScaling;
+
+        // Threshold set so default values (50/50/50/50) show meandering
+        if (braidingIndex > 0.5) {
+            return 'braided';
         }
 
         // Meandering is the default pattern for most rivers

@@ -71,7 +71,7 @@ function cleanup() {
         window.removeEventListener('resize', resizeHandler);
     }
     // Stop flow animation
-    if (PlanView && PlanView.stopFlowAnimation) {
+    if (typeof PlanView !== 'undefined' && PlanView.stopFlowAnimation) {
         PlanView.stopFlowAnimation();
     }
 }
@@ -240,6 +240,10 @@ function updateAll() {
  * Handle window resize - reinitialize visualizations
  */
 function handleResize() {
+    // Stop animation and cancel in-flight transitions before reinitializing
+    PlanView.stopFlowAnimation();
+    if (ScaleView.beamGroup) ScaleView.beamGroup.interrupt();
+
     ScaleView.init('scale-viz');
     PlanView.init('plan-viz');
 
@@ -312,16 +316,23 @@ function formatD50(value) {
 }
 
 /**
- * Map slope slider to a relative percent (0.1-10)
+ * Map slope slider (1-100) to log-scaled display value (0.1-100)
+ * Matches Balance.mapSlope() mapping.
  * @param {number} value
  * @returns {string}
  */
 function formatSlope(value) {
-    return (value / 10).toFixed(1);
+    const ratio = (value - 1) / 99;
+    const logValue = -1 + 3 * ratio;
+    const s = Math.pow(10, logValue);
+    if (s < 1) return s.toFixed(2);
+    if (s < 10) return s.toFixed(1);
+    return Math.round(s).toString();
 }
 
 /**
- * Generate a dynamic "why" sentence based on what changed
+ * Generate a dynamic "why" sentence based on what changed and the actual state
+ * @param {string} stateName - Current balance state
  * @returns {string}
  */
 function getWhySentence(stateName) {
@@ -329,16 +340,20 @@ function getWhySentence(stateName) {
         return 'Sediment supply and transport capacity are balanced.';
     }
 
-    const { lastChanged, previousState, Qs, D50, Qw, S } = state;
+    const { lastChanged, previousState } = state;
+    const stateDescription = stateName === 'aggradation'
+        ? 'Sediment supply exceeds transport capacity.'
+        : 'Transport capacity exceeds sediment supply.';
 
     if (!lastChanged) {
-        return stateName === 'aggradation'
-            ? 'Sediment supply exceeds transport capacity.'
-            : 'Transport capacity exceeds sediment supply.';
+        return stateDescription;
     }
 
     const currentValue = state[lastChanged];
     const previousValue = previousState[lastChanged];
+    if (currentValue === previousValue) {
+        return stateDescription;
+    }
     const direction = currentValue > previousValue ? 'increased' : 'decreased';
 
     const paramNames = {
@@ -348,24 +363,7 @@ function getWhySentence(stateName) {
         S: 'channel slope (S)'
     };
 
-    const causes = {
-        Qs: { aggradation: 'shifts toward aggradation.', degradation: 'shifts toward degradation.' },
-        D50: { aggradation: 'shifts toward aggradation.', degradation: 'shifts toward degradation.' },
-        Qw: { aggradation: 'shifts toward aggradation.', degradation: 'shifts toward degradation.' },
-        S: { aggradation: 'shifts toward aggradation.', degradation: 'shifts toward degradation.' }
-    };
-
-    // Determine the effect based on which side of the equation the parameter is on
-    const paramIsSediment = ['Qs', 'D50'].includes(lastChanged);
-    let effect;
-
-    if (paramIsSediment) {
-        effect = direction === 'increased' ? 'aggradation' : 'degradation';
-    } else {
-        effect = direction === 'increased' ? 'degradation' : 'aggradation';
-    }
-
-    return `The ${direction} ${paramNames[lastChanged]} shifts the balance toward ${effect}.`;
+    return `${stateDescription} The ${direction} ${paramNames[lastChanged]} contributed to this.`;
 }
 
 

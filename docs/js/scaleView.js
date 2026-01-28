@@ -24,7 +24,6 @@ const ScaleView = {
 
     // Current parameter values for dynamic updates
     currentParams: { Qs: 50, D50: 50, Qw: 50, S: 50 },
-    seedBase: 0,
 
     /**
      * Initialize the scale visualization
